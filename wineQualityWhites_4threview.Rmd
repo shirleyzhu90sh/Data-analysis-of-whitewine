@@ -1,0 +1,517 @@
+探索白葡萄酒质量
+========================================================
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk.
+# This prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(reshape2)
+library(grid)
+library(gridExtra)
+library(car)
+library(dplyr)
+library(RColorBrewer)
+```
+
+# 数据读取和简单观察
+### What is the structure of your dataset?
+### 此数据集有4898行数据，有13列，第一列为序号，其他描述了白葡萄酒中的化学成分、密度、pH值和评级。
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+wq <- read.csv("wineQualityWhites.csv")
+str(wq)
+summary(wq)
+```
+
+# Univariate Analysis
+
+### What is/are the main feature(s) of interest in your dataset?
+### 最主要的特征是评级（quality）。
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+### 葡萄酒的密度density、pH值以及酒的甜度residual.sugar、酸度citric.acid、酒精含量alcohol等是最可能影响评级的因素。
+### Did you create any new variables from existing variables in the dataset?
+### 目前没有，会在接下来的分析中引入。
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+### 但看上面的统计数据，可以发现例如residual.sugar的最大值65.800、total.sulfur.dioxide的最大值440.0和density的最大值1.0390远大于四分之三分位的值，可能是异常值，会导致分布偏左。
+
+# Univariate Plots Section
+### 先观察一下数据集中葡萄酒评级的分布情况，是比较漂亮的正态分布。
+```{r echo=FALSE, Univariate_Plots}
+ggplot(data = wq, aes(x = quality)) + 
+  geom_bar(stat = 'count', color = 'black', fill = '#099DD9') + 
+  scale_x_continuous(breaks = 0:10) + 
+  labs(x='Quality', y='Count',title='Quality Distribution of WhiteWine')
+```
+
+### 其中评级为6的葡萄酒占到45%左右。
+```{r}
+ggplot(data = wq, aes(x = quality, y = ..count../sum(..count..))) + 
+  geom_bar(stat = 'count', color = 'black', fill = '#099DD9') + 
+  scale_x_continuous(breaks = 0:10) + 
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, 0.1), 
+                     labels = scales::percent) + 
+  geom_freqpoly(binwidth=1, color = "Red") + 
+  labs(x='Quality', y='Percent',
+       title='Wine Quality Distribution of WhiteWine (percentage)')
+```
+
+### 创建函数univ_his，便于查看不同特征的分布情况。
+### Fixed.acidity的直方图分布呈现类似正态分布，整体分布偏左，平均值为6.855，中位数是6.800，将25%-75%之外的异常值取出，总共有119个异常值。
+
+```{r}
+univ_his <- function(feature) {
+    ggplot(data=wq, aes_string(x = feature)) + 
+    geom_histogram(binwidth = 0.1, color = 'black', fill = '#099DD9')
+}
+fa_his <- univ_his("fixed.acidity") + labs(x = "fixed.acidity (g / dm^3)")
+fa_title = textGrob("Fixed.acidity Distribution of WhiteWine")
+grid.arrange(fa_his, top = fa_title) 
+summary(wq$fixed.acidity)
+QL <- quantile(wq$fixed.acidity, probs = 0.25)
+QU <- quantile(wq$fixed.acidity, probs = 0.75)
+fa_out <- subset(wq, fixed.acidity > QU + 1.5*(QU-QL) | 
+                   fixed.acidity < QL - 1.5*(QU-QL))
+length(fa_out$fixed.acidity)
+
+```
+
+
+### citric.acid的直方图分布呈现较好的正态分布，整体分布偏左，平均值为0.3342，中位数是0.3200，将25%-75%之外的异常值取出，总共有270个异常值。
+```{r}
+univ_his("citric.acid") + labs(x = "citric.acid (g / dm^3)", title = "Citric.acid Distribution of WhiteWine") 
+QL <- quantile(wq$citric.acid, probs = 0.25)
+QU <- quantile(wq$citric.acid, probs = 0.75)
+summary(wq$citric.acid)
+ca_out <- subset(wq, citric.acid > QU + 1.5*(QU-QL) | 
+                   citric.acid < QL - 1.5*(QU-QL))
+length(ca_out$citric.acid)
+```
+
+### free.sulfur.dioxide的直方图分布呈现较好的正态分布，整体分布偏左，平均值为35.31，中位数是34.00，将25%-75%之外的异常值取出，总共有50个异常值。
+```{r}
+ggplot(data = wq, aes(x = free.sulfur.dioxide)) + 
+  geom_histogram(binwidth = 10, color = 'black', fill = '#099DD9') + 
+  labs(x = "free.sulfur.dioxide (mg / dm^3)", 
+       title = "free.sulfur.dioxide Distribution of WhiteWine")
+QL <- quantile(wq$free.sulfur.dioxide, probs = 0.25)
+QU <- quantile(wq$free.sulfur.dioxide, probs = 0.75)
+summary(wq$free.sulfur.dioxide)
+fsd_out <- subset(wq, free.sulfur.dioxide > QU + 1.5*(QU-QL) | 
+                    free.sulfur.dioxide < QL - 1.5*(QU-QL))
+length(fsd_out$free.sulfur.dioxide)
+```
+
+### total.sulfur.dioxide的直方图分布呈现较好的正态分布，整体分布偏左，平均值为138.4，中位数是134.0，将25%-75%之外的异常值取出，总共有19个异常值。
+```{r}
+ggplot(data = wq, aes(x = total.sulfur.dioxide)) + 
+  geom_histogram(binwidth = 20, color = 'black', fill = '#099DD9') + 
+  labs(x = "total.sulfur.dioxide (mg / dm^3)", 
+       title = "total.sulfur.dioxide Distribution of WhiteWine")
+QL <- quantile(wq$total.sulfur.dioxide, probs = 0.25)
+QU <- quantile(wq$total.sulfur.dioxide, probs = 0.75)
+summary(wq$total.sulfur.dioxide)
+tsd_out <- subset(wq, total.sulfur.dioxide > QU + 1.5*(QU-QL) | 
+                    total.sulfur.dioxide < QL - 1.5*(QU-QL))
+length(tsd_out$total.sulfur.dioxide)
+```
+
+### sulphates的直方图分布呈现较好的正态分布，整体分布偏左，平均值为0.4898，中位数是0.4700，将25%-75%之外的异常值取出，总共有124个异常值。
+```{r}
+univ_his("sulphates") + 
+  labs(x = "sulphates (g / dm^3)", 
+       title = "sulphates Distribution of WhiteWine") 
+QL <- quantile(wq$sulphates, probs = 0.25)
+QU <- quantile(wq$sulphates, probs = 0.75)
+summary(wq$sulphates)
+s_out <- subset(wq, sulphates > QU + 1.5*(QU-QL) | 
+                    sulphates < QL - 1.5*(QU-QL))
+length(s_out$sulphates)
+```
+
+### alcohol的直方图分布较均匀，平均值为10.51，中位数是10.40。
+```{r}
+univ_his("alcohol") + 
+  labs(x = "alcohol (% by volume)", 
+       title = "alcohol Distribution of WhiteWine") 
+QL <- quantile(wq$alcohol, probs = 0.25)
+QU <- quantile(wq$alcohol, probs = 0.75)
+summary(wq$alcohol)
+a_out <- subset(wq, alcohol > QU + 1.5*(QU-QL) | 
+                    alcohol < QL - 1.5*(QU-QL))
+length(a_out$alcohol)
+```
+
+### Density的直方图分布呈现较好的正态分布，整体分布偏左，平均值为0.9940，中位数是0.9937，将25%-75%之外的异常值取出，总共有5个异常值。
+```{r}
+ggplot(data = wq, aes(x = density)) + 
+  geom_histogram(binwidth = 0.002, color = 'black', fill = '#099DD9') + 
+  labs(x='density(g / cm^3)', y='Count',
+       title='Density Distribution of WhiteWine')
+summary(wq$density)
+d_out <- subset(wq, density > QU + 1.5*(QU-QL) | density < QL - 1.5*(QU-QL))
+length(d_out$density)
+```
+
+### pH的直方图分布呈现较好的正态分布，分布均匀,平均值为3.188，中位数是3.180。
+```{r}
+univ_his("pH") + labs(title = "PH Distribution of WhiteWine")
+QL <- quantile(wq$pH, probs = 0.25)
+QU <- quantile(wq$pH, probs = 0.75)
+summary(wq$pH)
+pH_out <- subset(wq, pH > QU + 1.5*(QU-QL) | pH < QL - 1.5*(QU-QL))
+length(pH_out$pH)
+```
+
+
+
+
+# Bivariate Plots Section
+### 为了探索两个变量之间的关系，首先利用cor函数打印出Pearson相关系数矩阵。
+```{r echo=FALSE, Bivariate_Plots}
+wq_cor <- cor(x = wq, y = wq, method = 'pearson')
+head(wq_cor, 15)
+```
+
+### 在这里我画出了fixed.acidity, citric.acid, residual.sugar, pH, sulphates, alcohol和density之间的散点图矩阵。
+
+```{r}
+scatterplotMatrix(~ fixed.acidity + citric.acid + residual.sugar + pH + 
+                    sulphates + alcohol + density, data=wq, spread=TRUE,
+                  main="Scatterplot Matrix via car package",diagonal="density")
+```
+
+### 创建两个变量之间的散点图函数，增加一定的抖动，并添加平滑器。
+```{r}
+biv_box <- function(feature1, feature2) {
+    ggplot(data=wq, aes_string(x = feature1, y = feature2)) + 
+    geom_point(alpha = 1/5, color = "#CC79A7") +  #增加一定的抖动
+    geom_smooth(method = lm)
+}
+```
+
+### 创建两个变量之间的相关系数函数。
+```{r}
+biv_cor <- function(feature1, feature2) {
+    with(wq, cor.test(feature1, feature2, method = 'pearson'))
+}
+```
+
+### 根据相关系数矩阵，我发现糖分和密度之间的相关性也很强，画出两者的散点图，发现的确是正强相关，相关系数为0.839。
+```{r}
+biv_box('residual.sugar', 'density') +
+  labs(x='residual.sugar(g / dm^3)', y='density(g / cm^3)',
+       title='Relationship between residual.sugar and density') +
+  coord_cartesian(ylim=c(0.985,1.005))
+biv_cor(wq$residual.sugar, wq$density)
+```
+
+### 同样酒精也会影响密度，画出两者的散点图，发现是负强相关，相关系数为-0.78。
+```{r}
+biv_box('alcohol', 'density') +
+  labs(x='alcohol(% by volume)', y='density(g / cm^3)',
+       title='Relationship between alcohol and density') + 
+  coord_cartesian(ylim=c(0.985,1.005))
+biv_cor(wq$alcohol, wq$density)
+```
+
+### 除了特征跟密度的关系，根据特征的定义free.sulfur.dioxide代表葡萄酒中二氧化硫自由基的数量，total.sulfur.dioxide代表葡萄酒中二氧化硫自由基和束缚基的总数，相信两者之间一定存在某种关联，因此画出两者之间的散点图，发现：
+### 1、分布大多聚集在free.sulfur.dioxide < 100的地方；
+### 2、两者之间呈正相关,相关系数为0.61；
+
+```{r}
+biv_box('free.sulfur.dioxide', 'total.sulfur.dioxide') +
+  labs(x='free.sulfur.dioxide(mg / dm^3)', y='total.sulfur.dioxide(mg / dm^3)',
+       title='Relationship between free.sulfur.dioxide and total.sulfur.dioxide')
+biv_cor(wq$free.sulfur.dioxide, wq$total.sulfur.dioxide)
+```
+
+### 为了将范围锁定在free.sulfur.dioxide < 100的部分，我对x和y同时取根号,相关系数为0.63。
+```{r}
+free.sulfur.dioxide.sqrt <- sqrt(wq$free.sulfur.dioxide)
+total.sulfur.dioxide.sqrt <- sqrt(wq$total.sulfur.dioxide)
+
+biv_box('free.sulfur.dioxide.sqrt', 'total.sulfur.dioxide.sqrt') +
+  labs(x='free.sulfur.dioxide (sqrt)', y='total.sulfur.dioxide (sqrt)',
+       title='Relationship between free and total sulfur.dioxide')
+
+biv_cor(free.sulfur.dioxide.sqrt, total.sulfur.dioxide.sqrt)
+```
+
+### 根据定义，sulphates是一种能促进二氧化硫含量的葡萄酒添加剂，我想观察下它跟free.sulfur.dioxide之间的关系，可以观察到：
+### 1、sulphates跟free.sulfur.dioxide之间的关系是正相关的；
+### 2、free.sulfur.dioxide的mean和median线基本处于35左右，0.1分位线处于20左右，0.9分位线处于50左右；
+```{r}
+ggplot(data = subset(wq, free.sulfur.dioxide < 150), 
+       aes(x = sulphates, y = free.sulfur.dioxide)) + 
+  geom_point(alpha = 1/10, color = "#E69F00") +
+  scale_y_continuous() +   #分别画出均值,0.1,0.5,0.9分位的线
+  geom_line(stat = 'summary', fun.y = mean, color = "red") +
+  geom_line(stat = 'summary', fun.y = quantile, fun.args = list(probs = .1), 
+            linetype = 2, color = 'purple') +
+  geom_line(stat = 'summary', fun.y = quantile, fun.args = list(probs = .5), 
+            linetype = 2, color = '#009E73') +
+  geom_line(stat = 'summary', fun.y = quantile, fun.args = list(probs = .9), 
+            linetype = 2, color = '#0072B2') +
+  labs(x='sulphates(g / dm^3)', y='free.sulfur.dioxide(mg / dm^3)',
+       title='Relationship between sulphates and free.sulfur.dioxide')
+```
+
+### 那么sulphates跟totle.sulfur.dioxide之间的关系如何，同样可以观察到：
+### 1、sulphates跟totle.sulfur.dioxide之间的关系是正相关的；
+### 2、totle.sulfur.dioxide的mean和median线基本处于110左右，0.1分位线处于80左右，0.9分位线处于160左右；
+```{r}
+ggplot(data = wq, aes(x = sulphates, y = total.sulfur.dioxide)) + 
+  geom_point(alpha = 1/10, color = "#E69F00") +#分别画出均值,0.1,0.5,0.9分位的线
+  geom_line(stat = 'summary', fun.y = mean, color = "red") +
+  geom_line(stat = 'summary', fun.y = quantile, fun.args = list(probs = .1), 
+            linetype = 2, color = 'purple') +
+  geom_line(stat = 'summary', fun.y = quantile, fun.args = list(probs = .5), 
+            linetype = 2, color = '#009E73') +
+  geom_line(stat = 'summary', fun.y = quantile, fun.args = list(probs = .9), 
+            linetype = 2, color = '#0072B2') +
+  labs(x='sulphates(g / dm^3)', y='total.sulfur.dioxide(mg / dm^3)',
+       title='Relationship between sulphates and total.sulfur.dioxide')
+```
+
+
+
+### 接下来的问题是，评级跟不同特征之间的关系如何进行对比？
+
+```{r}
+qua_com <- function(feature1, feature2) {
+    ggplot(data=wq, aes_string(x = feature1, y = feature2)) + 
+    geom_jitter(alpha = 1/5) +
+    geom_boxplot(alpha = 1/5, color = "blue") +
+    stat_summary(fun.y = "mean", 
+               geom = "point", 
+               color = "red") +
+  geom_smooth(method='lm', aes(group = 1))
+}
+```
+
+
+### 做出quality和pH之间的关系，对于评级4以下的葡萄酒，pH值跟评级是负相关的，对于评级5以上的葡萄酒，pH值跟评级是正相关的。
+```{r}
+qua_com(as.factor(wq$quality), wq$pH) +
+  labs(x='quality', y='pH',
+       title='Relationship between pH and quality')
+```
+
+### 做出quality和alcohol之间的关系，对于评级5以下的葡萄酒，酒精含量跟评级是负相关的，对于评级5以上的葡萄酒，酒精含量跟评级是正相关的，较pH值而言，酒精含量对评级的影响更大。
+
+```{r}
+qua_com(as.factor(wq$quality), wq$alcohol) +
+  labs(x='quality', y='alcohol',
+       title='Relationship between alcohol and quality')
+```
+
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+### 评级和alcohol关系：对于评级5以下的葡萄酒，酒精含量跟评级是负相关的，对于评级5以上的葡萄酒，酒精含量跟评级是正相关的；
+### 评级和pH的中位数之间的关系，对于评级4以下的葡萄酒，pH值跟评级是负相关的，对于评级5以上的葡萄酒，pH值跟评级是正相关的；
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+### 除了评级，我还考虑了residual.sugar, alcohol和density之间的关系，以及sulphates跟free.sulfur.dioxide, totle.sulfur.dioxide之间的关系。
+
+### What was the strongest relationship you found?
+### 目前发现最强的相关关系是糖分和密度，相关系数为0.838966455
+
+
+
+
+# Multivariate Plots Section
+
+### 下图是alcohol, density和quality之间的关系，可以看出评级越高的葡萄酒，其密度和酒精负相关的斜率越大。
+
+```{r echo=FALSE, Multivariate_Plots }
+mul_plot <- function(feature1, feature2, feature3){
+  ggplot(aes(x = feature1,y = feature2,color = feature3),
+       data = wq) +
+geom_jitter(alpha = 0.2) +
+  geom_smooth(method = "lm", se = FALSE,size=1) +
+  scale_color_brewer(palette = "Blues")
+}
+
+mul_plot(wq$alcohol, wq$density, as.factor(wq$quality))  +
+  coord_cartesian(ylim=c(0.985,1.005)) +
+  labs(x='alcohol(% by volume)', y='density(g / cm^3)',
+       title='Relationship between alcohol and density with different quality', 
+       colour="quality")
+```
+
+
+### 下图是residual.sugar, density和quality之间的关系，可以看出评级越高的葡萄酒，其密度和糖含量正相关的斜率越大。
+
+```{r}
+mul_plot(wq$residual.sugar, wq$density, as.factor(wq$quality))  +
+  coord_cartesian(xlim=c(1,20))  +
+  coord_cartesian(ylim=c(0.985,1.005)) +
+  labs(x='residual.sugar(g / dm^3)', y='density(g / cm^3)',
+       title='Relationship between residual.sugar and density 
+with different quality', 
+       colour="quality")
+```
+
+### 下图是alcohol, pH和quality之间的关系，可以看出评级越高的葡萄酒，其酒精和pH值正相关的斜率越大。
+
+```{r}
+mul_plot(wq$alcohol, wq$pH, as.factor(wq$quality))  +
+#  coord_cartesian(xlim=c(1,20))  +
+#  coord_cartesian(ylim=c(0.985,1.005)) +
+  labs(x='alcohol(% / volume)', y='pH',
+       title='Relationship between residual.sugar and density 
+with different quality', 
+       colour="quality")
+```
+
+### 下图是sulphates, pH和quality之间的关系，可以看出评级越高的葡萄酒，其sulphates和pH值正相关的斜率越大。
+
+```{r}
+mul_plot(wq$sulphates, wq$pH, as.factor(wq$quality))  +
+#  coord_cartesian(xlim=c(1,20))  +
+#  coord_cartesian(ylim=c(0.985,1.005)) +
+  labs(x='sulphates(g / dm^3)', y='pH',
+       title='Relationship between residual.sugar and density 
+with different quality', 
+       colour="quality")
+```
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+### 根据相关系数表，我们可以看出两个比较重要的变量，一个是quality，一个是density，本身这两者之间是负相关的，也就是density的变化会带来quality的反向变化。
+
+### Were there any interesting or surprising interactions between features?
+### 更进一步讲，quality跟sulphates，pH和alcohol呈现正相关关系，跟其他变量呈现反相关关系
+### 而density则跟quality,pH,alcohol呈反向相关，跟其他剩余其他变量呈正向相关关系。
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+### 没有。
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+plot_one <- function(feature1, feature2){
+  ggplot(data = wq, aes(x = feature1, y = feature2)) + 
+  geom_boxplot(aes(group = quality), 
+               outlier.colour = 'red', outlier.shape = 10, width = 0.8) +
+  scale_x_continuous(breaks = 0:10) +
+  stat_summary(fun.y = "mean", 
+               geom = "point", 
+               color = "purple") +
+  geom_smooth(method='lm', aes(group = 1)) + 
+  theme(legend.position = "none")
+}
+
+p1 <- plot_one(wq$quality, wq$sulphates) + 
+  scale_y_continuous(breaks = c(0, 0.3, 0.6, 0.9, 1.2)) +  
+  labs(x='quality', y='sulphates(g / dm^3)')
+p2 <- plot_one(wq$quality, wq$pH) + 
+  scale_y_continuous(breaks = c(2.7, 3.0, 3.3, 3.6)) +  
+  labs(x='quality', y='pH')
+p3 <- plot_one(wq$quality, wq$alcohol) + 
+  scale_y_continuous(breaks = c(8, 10, 12, 14)) +  
+  labs(x='quality', y='alcohol(% by volume)')
+title1 = textGrob("Relationship between quality and pH, sulphates and alcohol")
+grid.arrange(p1, p2, p3 + theme(legend.position = "none"), top = title1, ncol = 3) 
+
+```
+
+### Description One
+### 图1描述了跟评级正相关的三个特征：sulphates, pH和alcohol跟评级之间的箱线图，红色点代表异常值，可以看出硫酸盐在葡萄酒质量从低到高的变化中，其值相对稳定，变化比较微弱。相比较而言，醇和pH在质量分数变化中，有比较明显的变动。
+
+### Plot Two
+```{r echo=FALSE, Plot_Two, fig.width = 8, fig.height = 15}
+
+pd1 <- mul_plot(wq$alcohol, wq$density, as.factor(wq$quality))  +
+  coord_cartesian(ylim=c(0.985,1.005)) + 
+  theme(legend.position = "none") +
+  labs(x='alcohol(% by volume)', y='density(g / cm^3)')
+pd2 <- mul_plot(wq$residual.sugar, wq$density, as.factor(wq$quality))  +
+#  coord_cartesian(xlim=c(1,20))  +
+  coord_cartesian(ylim=c(0.985,1.005)) + 
+  theme(legend.position = "none") +
+  labs(x='residual.sugar(g / dm^3)', y='density(g / cm^3)')
+pd3 <- mul_plot(wq$citric.acid, wq$density, as.factor(wq$quality))  +
+#  coord_cartesian(xlim=c(1,20))  +
+  coord_cartesian(ylim=c(0.985,1.005)) + 
+  theme(legend.position = "none") +
+  labs(x='citric.acid(g / dm^3)', y='density(g / cm^3)')
+g <- ggplotGrob(pd1 + theme(legend.position = "bottom") +labs(colour="quality"))$grobs
+legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]] #增加图例定义
+
+grid.arrange(arrangeGrob(pd1, pd2, pd3, ncol =1), legend, 
+             top = "Relationship between density and alcohol, sulphates and citric.acid", 
+             heights=c(9,1))
+```
+
+
+### Description Two
+### 图2描述了跟density相关的三个特征：alcohol, sulphates和 citric.acid跟评级之间的三点图，不同深浅的线代表不同的quality，颜色越深，评级越高。可以看出：
+### 1、不同评级下的酒精含量跟密度之间都是负相关的，评级越高，相关程度越高；
+### 2、不同评级下的sulphates含量跟密度之间都是正相关的，评级越高，相关程度越高；
+### 3、评级为3的葡萄酒中，柠檬酸含量跟密度之间呈负相关，其他4-9评级下的葡萄酒中柠檬酸含量跟密度之间大都是正相关的，评级越高，相关程度越高；
+
+### Plot Three
+
+```{r echo=FALSE, Plot_Three, fig.width = 8, fig.height = 10}
+#library(RColorBrewer)
+#wq$quality <- factor(wq$quality,levels = c(3,4,5,6,7,8,9))
+
+plot_three <- function(feature) {
+    ggplot(data=wq, 
+           aes_string(x = feature, y = wq$pH, color = wq$quality)) + 
+    geom_tile() + 
+    scale_fill_gradientn(colours = colorRampPalette(c('purple', 'yellow'))(100))+
+    geom_smooth(method = lm, aes(group = quality)) + 
+    theme(legend.position = "none")
+}
+ph1 <- plot_three("volatile.acidity")  +  
+  labs(x='volatile.acidity(g / dm^3)', y='pH')
+
+ph2 <- plot_three("citric.acid")  +  
+  labs(x='citric.acid(g / dm^3)', y='pH')
+
+ph3 <- plot_three("sulphates")  +  
+  labs(x='sulphates(g / dm^3)', y='pH')
+
+ph4 <- plot_three("alcohol")  +  
+  labs(x='alcohol(% by volume)', y='pH')
+
+g <- ggplotGrob(ph1 + theme(legend.position = "bottom") +labs(colour="quality"))$grobs
+legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]] #增加图例定义
+
+grid.arrange(arrangeGrob(ph1, ph2, ph3, ph4, ncol =2), legend, 
+             top = "Relationship between pH and features via different quality", 
+             heights=c(9,1))
+```
+
+
+### Description Three
+### 图3描述了pH和其他多个特征在不同评级下的情况，平滑器采用loess回归拟合，并增加图例定义和高度设置。可以看出:
+### 1、低质量的葡萄酒的pH值跟volatile.acidity呈负相关，高质量的葡萄酒的pH值跟volatile.acidity呈正相关；
+### 2、葡萄酒的pH值跟citric.acid基本呈负相关，质量越高，正相关越强；
+### 3、葡萄酒的pH值跟sulphates呈正相关，质量越高，正相关越强；
+### 4、葡萄酒的pH值跟酒精浓度基本呈正相关，质量越高，正相关越强；
+
+------
+
+# Reflection
+### 对于葡萄酒的数据集，除了评级之外，有12个相关特征，但是其实这里想知道quality跟其他特征之间的关系，总结以上分析，得出如下结论：
+
+### quality正相关的三个特征是sulphates, pH和alcohol，sulphates(硫酸盐)的存在，一定范围内，对葡萄酒的质量是有益的，硫酸盐可以防止葡萄酒氧化，并且亚硫酸盐还充当着提取色素、保持葡萄酒风味的角色。pH值对葡萄酒色泽，酸味，微生物都有关联。从car包的散点图矩阵，我们可以看到，quality打9分的葡萄酒，pH值的范围就是在3.2~3.4范围内。至于alcohol，评级较高的葡萄酒，一般来说酒精含量也相对较高。
+
+### 在整个项目过程中，首先遇到的问题就是没有思路。所谓业务能力决定了数据分析的上限，在开始数据分析之前一定要对这个数据集的相关知识做一个储备。其次，难点在于什么情况下需要使用什么样的图形来展现，多多尝试找到合适的图形，适当的变换坐标会有益处。最后，书面上的东西终究是简单的，需要在网上寻找更丰富的内容，例如car包等高级的library，例如图例定义等编程细节，都是需要不断积累的。为了更好的对葡萄酒进行分析，我们可以采集更多的样本数据作为训练样本，采用机器学习的方法建立分类器，对葡萄酒就行自动评级。
+
